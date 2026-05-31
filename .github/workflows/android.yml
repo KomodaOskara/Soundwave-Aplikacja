@@ -28,8 +28,13 @@ jobs:
           npm install @capacitor/android@6 --legacy-peer-deps
           npm install -D @capacitor/assets --legacy-peer-deps
 
-      - name: Dodaj platformę Android
-        run: npx cap add android || true
+      - name: Dodaj platformę Android (jeśli nie istnieje)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Platforma Android już istnieje w projekcie, pomijam dodawanie."
+          fi
 
       - name: Instalacja biblioteki Pillow dla Pythona
         run: python3 -m pip install Pillow
@@ -42,7 +47,7 @@ jobs:
 
           icon_path = None
           for root, dirs, files in os.walk('.'):
-              if any(p in root for p in ['node_modules', 'android', '.git', '.github']):
+              if any(p in root for p in ['node_modules', 'android', '.git', '.github', 'assets']):
                   continue
               for f in files:
                   if f.lower() == 'icon.png':
@@ -55,7 +60,7 @@ jobs:
               print("BŁĄD KRYTYCZNY: Nie znaleziono pliku icon.png w repozytorium!")
               exit(1)
 
-          print(f"Znaleziono plik ikony: {icon_path}. Rozpoczynamy automatyczne generowanie struktury...")
+          print(f"Znaleziono plik ikony: {icon_path}. Przygotowywanie struktury...")
           
           try:
               img = Image.open(icon_path)
@@ -69,16 +74,16 @@ jobs:
               
               img.save('icon.png', 'PNG')
               img.save('splash.png', 'PNG')
-              print("Sukces! Cała struktura wymagana przez Capacitor Assets została poprawnie przygotowana.")
+              print("Struktura ikon została pomyślnie przygotowana.")
           except Exception as e:
-              print(f"Błąd podczas konwersji pliku graficznego: {e}")
+              print(f"Błąd konwersji pliku: {e}")
               exit(1)
           EOF
 
           ls -la assets/
 
       - name: Wygeneruj ikony i ekrany startowe za pomocą Capacitor Assets
-        run: npx cap assets generate --android
+        run: npx @capacitor/assets generate --android
 
       - name: Zsynchronizuj frontend do folderu Androida
         run: npx cap sync android
