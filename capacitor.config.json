@@ -2,8 +2,4 @@
   "appId": "pl.Soundwave.apka",
   "appName": "Soundwave",
   "webDir": "www",
-  "server": {
-    "url": "https://muzyka.komodaoskara.pl",
-    "cleartext": true
-  }
 }
