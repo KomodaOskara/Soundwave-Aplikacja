@@ -1,0 +1,46 @@
+name: Zbuduj aplikację iOS (IPA)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Budowanie IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Pobieranie kodu repozytorium
+        uses: actions/checkout@v4
+
+      - name: Konfiguracja środowiska Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalacja zależności i generatora ikon
+        run: |
+          npm install
+          npm install @capacitor/assets --save-dev
+
+      - name: Generowanie projektu iOS
+        run: npx cap add ios
+
+      - name: Generowanie ikon aplikacji
+        run: npx capacitor-assets generate --ios
+
+      - name: Budowanie aplikacji w Xcode (bez podpisywania)
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO SYMROOT=$(PWD)/build build
+
+      - name: Pakowanie do pliku .ipa
+        run: |
+          mkdir -p Payload
+          mv ios/App/build/Release-iphoneos/App.app Payload/
+          zip -r Soundwave.ipa Payload
+
+      - name: Udostępnienie pliku .ipa do pobrania
+        uses: actions/upload-artifact@v4
+        with:
+          name: Soundwave-IPA
+          path: Soundwave.ipa
