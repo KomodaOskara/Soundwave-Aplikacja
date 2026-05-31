@@ -2367,7 +2367,7 @@ async function savePlaylistOffline() {
 
 let offlineCache = [];
 
-const API = window.location.origin;
+const API = 'https://muzyka.komodaoskara.pl';
 const aud = document.getElementById('aud');
 
 let token = localStorage.getItem('sw_token') || '';
@@ -5314,7 +5314,7 @@ async function jamJoin() {
 }
 
 function connectJamWs(code) {
-  const wsUrl = `${location.origin.replace('http','ws')}/ws/jam/${code}?token=${encodeURIComponent(token)}`;
+  const wsUrl = `wss://muzyka.komodaoskara.pl/ws/jam/${code}?token=${encodeURIComponent(token)}`;
   jamWs = new WebSocket(wsUrl);
   jamWs.onopen = () => {
     jamActive = true;
