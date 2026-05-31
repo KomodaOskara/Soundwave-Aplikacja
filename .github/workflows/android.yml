@@ -24,9 +24,9 @@ jobs:
 
       - name: Zainstaluj zależności npm
         run: |
-          npm install
-          npm install @capacitor/android
-          npm install -D @capacitor/assets
+          npm install --legacy-peer-deps
+          npm install @capacitor/android@6 --legacy-peer-deps
+          npm install -D @capacitor/assets --legacy-peer-deps
 
       - name: Dodaj platformę Android
         run: npx cap add android || true
@@ -61,16 +61,12 @@ jobs:
               img = Image.open(icon_path)
               os.makedirs('assets', exist_ok=True)
               
-              # Generator bezwzględnie wymaga tych 5 plików w folderze assets.
-              # Przepuszczenie ich przez Pillow gwarantuje poprawny format nagłówków PNG.
               img.save('assets/icon-only.png', 'PNG')
               img.save('assets/icon-foreground.png', 'PNG')
-              img.save('assets/assets/icon-background.png', 'PNG') # Na wypadek różnych wersji narzędzia
               img.save('assets/icon-background.png', 'PNG')
               img.save('assets/splash.png', 'PNG')
               img.save('assets/splash-dark.png', 'PNG')
               
-              # Pliki zapasowe dla głównego katalogu
               img.save('icon.png', 'PNG')
               img.save('splash.png', 'PNG')
               print("Sukces! Cała struktura wymagana przez Capacitor Assets została poprawnie przygotowana.")
@@ -79,7 +75,6 @@ jobs:
               exit(1)
           EOF
 
-          # Sprawdzenie kontrolne czy pliki na pewno powstały przed uruchomieniem generatora
           ls -la assets/
 
       - name: Wygeneruj ikony i ekrany startowe za pomocą Capacitor Assets
