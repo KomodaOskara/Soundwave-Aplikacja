@@ -31,32 +31,58 @@ jobs:
       - name: Dodaj platformę Android
         run: npx cap add android || true
 
-      - name: Automatyczne przygotowanie struktury ikon
-        run: |
-          # Inteligentne szukanie pliku icon.png (ignoruje wielkość liter i szuka do 2 poziomów w głąb)
-          ICON_FILE=$(find . -maxdepth 2 -iname "icon.png" | head -n 1)
-          
-          if [ -z "$ICON_FILE" ]; then
-            echo "BŁĄD KRYTYCZNY: Nie znaleziono żadnego pliku o nazwie icon.png w repozytorium!"
-            exit 1
-          fi
-          
-          echo "Sukces! Znaleziono plik ikony pod ścieżką: $ICON_FILE"
-          
-          # Tworzymy folder assets wymagany przez narzędzie
-          mkdir -p assets
-          
-          # Kopiujemy znalezioną ikonę pod wszystkie nazwy, których bezwzględnie żąda Capacitor Assets
-          cp "$ICON_FILE" assets/icon-only.png
-          cp "$ICON_FILE" assets/icon-foreground.png
-          cp "$ICON_FILE" assets/icon-background.png
-          cp "$ICON_FILE" assets/splash.png
-          
-          # Na wszelki wypadek zabezpieczamy też główny folder (starsze wersje narzędzia)
-          cp "$ICON_FILE" icon.png
-          cp "$ICON_FILE" splash.png
+      - name: Instalacja biblioteki Pillow dla Pythona
+        run: python3 -m pip install Pillow
 
-      - name: Wygeneruj ikony i ekrany startowe z pliku icon.png
+      - name: Inteligentna naprawa i przygotowanie plików ikon
+        run: |
+          python3 - <<EOF
+          import os
+          from PIL import Image
+
+          icon_path = None
+          for root, dirs, files in os.walk('.'):
+              if any(p in root for p in ['node_modules', 'android', '.git', '.github']):
+                  continue
+              for f in files:
+                  if f.lower() == 'icon.png':
+                      icon_path = os.path.join(root, f)
+                      break
+              if icon_path:
+                  break
+
+          if not icon_path:
+              print("BŁĄD KRYTYCZNY: Nie znaleziono pliku icon.png w repozytorium!")
+              exit(1)
+
+          print(f"Znaleziono plik ikony: {icon_path}. Rozpoczynamy automatyczne generowanie struktury...")
+          
+          try:
+              img = Image.open(icon_path)
+              os.makedirs('assets', exist_ok=True)
+              
+              # Generator bezwzględnie wymaga tych 5 plików w folderze assets.
+              # Przepuszczenie ich przez Pillow gwarantuje poprawny format nagłówków PNG.
+              img.save('assets/icon-only.png', 'PNG')
+              img.save('assets/icon-foreground.png', 'PNG')
+              img.save('assets/assets/icon-background.png', 'PNG') # Na wypadek różnych wersji narzędzia
+              img.save('assets/icon-background.png', 'PNG')
+              img.save('assets/splash.png', 'PNG')
+              img.save('assets/splash-dark.png', 'PNG')
+              
+              # Pliki zapasowe dla głównego katalogu
+              img.save('icon.png', 'PNG')
+              img.save('splash.png', 'PNG')
+              print("Sukces! Cała struktura wymagana przez Capacitor Assets została poprawnie przygotowana.")
+          except Exception as e:
+              print(f"Błąd podczas konwersji pliku graficznego: {e}")
+              exit(1)
+          EOF
+
+          # Sprawdzenie kontrolne czy pliki na pewno powstały przed uruchomieniem generatora
+          ls -la assets/
+
+      - name: Wygeneruj ikony i ekrany startowe za pomocą Capacitor Assets
         run: npx cap assets generate --android
 
       - name: Zsynchronizuj frontend do folderu Androida
