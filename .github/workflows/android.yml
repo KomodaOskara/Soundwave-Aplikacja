@@ -31,6 +31,31 @@ jobs:
       - name: Dodaj platformę Android
         run: npx cap add android || true
 
+      - name: Automatyczne przygotowanie struktury ikon
+        run: |
+          # Inteligentne szukanie pliku icon.png (ignoruje wielkość liter i szuka do 2 poziomów w głąb)
+          ICON_FILE=$(find . -maxdepth 2 -iname "icon.png" | head -n 1)
+          
+          if [ -z "$ICON_FILE" ]; then
+            echo "BŁĄD KRYTYCZNY: Nie znaleziono żadnego pliku o nazwie icon.png w repozytorium!"
+            exit 1
+          fi
+          
+          echo "Sukces! Znaleziono plik ikony pod ścieżką: $ICON_FILE"
+          
+          # Tworzymy folder assets wymagany przez narzędzie
+          mkdir -p assets
+          
+          # Kopiujemy znalezioną ikonę pod wszystkie nazwy, których bezwzględnie żąda Capacitor Assets
+          cp "$ICON_FILE" assets/icon-only.png
+          cp "$ICON_FILE" assets/icon-foreground.png
+          cp "$ICON_FILE" assets/icon-background.png
+          cp "$ICON_FILE" assets/splash.png
+          
+          # Na wszelki wypadek zabezpieczamy też główny folder (starsze wersje narzędzia)
+          cp "$ICON_FILE" icon.png
+          cp "$ICON_FILE" splash.png
+
       - name: Wygeneruj ikony i ekrany startowe z pliku icon.png
         run: npx cap assets generate --android
 
