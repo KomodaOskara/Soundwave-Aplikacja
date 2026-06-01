@@ -6570,6 +6570,7 @@ const NORM_COMPRESSOR = {
 const NORM_MAKEUP_GAIN = 2.2; // ~7dB make-up gain żeby wyrównać głośność
 
 function _initAudioKeepAlive() {
+  aud.crossOrigin = "anonymous";
   const startCtx = () => {
     if (_keepAliveStarted) return;
     try {
