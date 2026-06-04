@@ -1,0 +1,40 @@
+name: Build Desktop App
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Generate Desktop App Files
+        shell: bash
+        run: |
+          mkdir desktop-app
+          # Tworzymy main.js automatycznie
+          echo "const { app, BrowserWindow } = require('electron');
+          function createWindow() {
+            const win = new BrowserWindow({ width: 1000, height: 800 });
+            win.loadURL('https://muzyka.komodaoskara.pl');
+          }
+          app.whenReady().then(createWindow);" > desktop-app/main.js
+          
+          # Tworzymy package.json automatycznie
+          echo '{"name": "soundwave-app", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^25.0.0", "electron-builder": "^24.0.0"}, "scripts": {"dist": "electron-builder"}}' > desktop-app/package.json
+
+      - name: Build EXE
+        run: |
+          cd desktop-app
+          npm install
+          npm run dist
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: SoundWave-Setup
+          path: desktop-app/dist/*.exe
