@@ -1,4 +1,4 @@
-name: Build Desktop App
+name: Zbuduj aplikację Windows (exe)
 on: [push]
 jobs:
   build:
