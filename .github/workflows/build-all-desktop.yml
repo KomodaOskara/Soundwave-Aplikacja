@@ -1,4 +1,4 @@
-name: Build All Desktop Apps
+name: Build All Desktop Apps Windows/Linux
 on: [push]
 jobs:
   build-windows:
