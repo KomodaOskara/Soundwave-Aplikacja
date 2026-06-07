@@ -1,0 +1,48 @@
+name: Build All Desktop Apps
+on: [push]
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Build Windows
+        shell: bash
+        run: |
+          mkdir desktop-app
+          echo "const { app, BrowserWindow } = require('electron');
+          function createWindow() {
+            const win = new BrowserWindow({ width: 1000, height: 800 });
+            win.loadURL('https://muzyka.komodaoskara.pl');
+          }
+          app.whenReady().then(createWindow);" > desktop-app/main.js
+          echo '{"name": "soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "scripts": {"dist": "electron-builder --win"}}' > desktop-app/package.json
+          cd desktop-app && npm install && npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoundWave-Windows
+          path: desktop-app/dist/*.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Build Linux
+        shell: bash
+        run: |
+          mkdir desktop-app
+          echo "const { app, BrowserWindow } = require('electron');
+          function createWindow() {
+            const win = new BrowserWindow({ width: 1000, height: 800 });
+            win.loadURL('http://192.168.1.XX:8000');
+          }
+          app.whenReady().then(createWindow);" > desktop-app/main.js
+          echo '{"name": "soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "scripts": {"dist": "electron-builder --linux appimage"}}' > desktop-app/package.json
+          cd desktop-app && npm install && npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoundWave-Linux
+          path: desktop-app/dist/*.AppImage
