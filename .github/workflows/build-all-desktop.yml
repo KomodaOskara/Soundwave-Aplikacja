@@ -26,11 +26,10 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Dodano brakujące pakiety do package.json
+          # Poprawiono: przeniesiono electron do devDependencies
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0", 
-            "dependencies": {"electron": "^29.4.6"},
-            "devDependencies": {"electron-builder": "^24.13.3"},
+            "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
               "forceCodeSigning": false,
@@ -68,11 +67,10 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Dodano brakujące pakiety do package.json
+          # Poprawiono: przeniesiono electron do devDependencies
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
-            "dependencies": {"electron": "^29.4.6"},
-            "devDependencies": {"electron-builder": "^24.13.3"},
+            "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
               "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"}
