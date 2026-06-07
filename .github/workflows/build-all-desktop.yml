@@ -26,9 +26,9 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Poprawiono: przeniesiono electron do devDependencies
           echo '{
-            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0", 
+            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
+            "main": "main.js",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
@@ -67,9 +67,9 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Poprawiono: przeniesiono electron do devDependencies
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
+            "main": "main.js",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
