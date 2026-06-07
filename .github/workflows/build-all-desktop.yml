@@ -30,14 +30,12 @@ jobs:
             "productName": "Soundwave",
             "version": "1.0.0",
             "main": "main.js",
-            "homepage": "https://muzyka.komodaoskara.pl",
             "author": {"name": "Oskar", "email": "oskar@example.com"},
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
               "productName": "Soundwave",
-              "win": {"icon": "icon.png", "target": "nsis"},
-              "extraResources": ["icon.png"]
+              "win": {"icon": "icon.png", "target": "nsis"}
             }
           }' > desktop-app/package.json
           
@@ -85,9 +83,12 @@ jobs:
                 "icon": "icon.png",
                 "target": "rpm",
                 "category": "Audio",
-                "maintainer": "Oskar <oskar@example.com>"
-              },
-              "extraResources": ["icon.png"]
+                "maintainer": "Oskar <oskar@example.com>",
+                "desktop": {
+                  "Name": "Soundwave",
+                  "Icon": "icon.png"
+                }
+              }
             }
           }' > desktop-app/package.json
           
