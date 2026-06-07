@@ -44,7 +44,6 @@ jobs:
         with:
           name: SoundWave-Windows
           path: desktop-app/dist/*.exe
-
  build-linux:
     runs-on: ubuntu-latest
     steps:
