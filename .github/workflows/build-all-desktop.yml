@@ -36,12 +36,12 @@ jobs:
             "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
             "build": {
               "appId": "com.soundwave.app", 
-              "win": {"icon": "icon.png", "target": "nsis"}
+              "win": {"icon": "icon.png", "target": "nsis", "sign": false}
             },
             "scripts": {"dist": "electron-builder"}
           }' > desktop-app/package.json
           
-          cd desktop-app && npm install && npm run dist
+          cd desktop-app && npm install --network-timeout=100000 && npm run dist
       - uses: actions/upload-artifact@v4
         with:
           name: SoundWave-Windows
@@ -86,7 +86,7 @@ jobs:
             "scripts": {"dist": "electron-builder"}
           }' > desktop-app/package.json
           
-          cd desktop-app && npm install && npm run dist
+          cd desktop-app && npm install --network-timeout=100000 && npm run dist
       - uses: actions/upload-artifact@v4
         with:
           name: SoundWave-Linux
