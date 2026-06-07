@@ -45,7 +45,7 @@ jobs:
           name: SoundWave-Windows
           path: desktop-app/dist/*.exe
 
-  build-linux:
+ build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,16 +68,27 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
+          # Uzupełnione pola: homepage, author, maintainer
           echo '{
-            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
+            "name": "soundwave",
+            "productName": "Soundwave",
+            "version": "1.0.0",
             "main": "main.js",
-            "author": "Oskar",
-            "description": "Soundwave Desktop App",
+            "homepage": "https://muzyka.komodaoskara.pl",
+            "author": {
+              "name": "Oskar",
+              "email": "oskar@example.com"
+            },
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
               "productName": "Soundwave",
-              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"},
+              "linux": {
+                "icon": "icon.png",
+                "target": "rpm",
+                "category": "Audio",
+                "maintainer": "Oskar <oskar@example.com>"
+              },
               "extraResources": ["icon.png"]
             }
           }' > desktop-app/package.json
