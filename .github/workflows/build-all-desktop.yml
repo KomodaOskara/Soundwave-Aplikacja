@@ -12,9 +12,8 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow, Menu, nativeImage } = require('electron');
+          echo "const { app, BrowserWindow, Menu } = require('electron');
           const path = require('path');
-          const { autoUpdater } = require('electron-updater');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
@@ -23,19 +22,18 @@ jobs:
             });
             Menu.setApplicationMenu(null);
             win.loadURL('https://muzyka.komodaoskara.pl');
-            autoUpdater.checkForUpdatesAndNotify();
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
-            "author": "Oskar <oskar@example.com>",
-            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
-            "dependencies": {"electron-updater": "^6.1.7"},
+            "author": "Oskar",
+            "description": "Soundwave Desktop App",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
+              "productName": "Soundwave",
               "win": {"icon": "icon.png", "target": "nsis"},
               "extraResources": ["icon.png"]
             }
@@ -57,9 +55,8 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow, Menu, nativeImage } = require('electron');
+          echo "const { app, BrowserWindow, Menu } = require('electron');
           const path = require('path');
-          const { autoUpdater } = require('electron-updater');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
@@ -68,20 +65,19 @@ jobs:
             });
             Menu.setApplicationMenu(null);
             win.loadURL('https://muzyka.komodaoskara.pl');
-            autoUpdater.checkForUpdatesAndNotify();
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
-            "author": "Oskar <oskar@example.com>",
-            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
-            "dependencies": {"electron-updater": "^6.1.7"},
+            "author": "Oskar",
+            "description": "Soundwave Desktop App",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio", "maintainer": "Oskar <oskar@example.com>"},
+              "productName": "Soundwave",
+              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"},
               "extraResources": ["icon.png"]
             }
           }' > desktop-app/package.json
