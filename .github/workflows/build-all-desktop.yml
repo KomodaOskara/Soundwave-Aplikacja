@@ -29,6 +29,8 @@ jobs:
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
+            "author": "Oskar <oskar@example.com>",
+            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
@@ -70,10 +72,17 @@ jobs:
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
+            "author": "Oskar <oskar@example.com>",
+            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app", 
-              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"}
+              "linux": {
+                "icon": "icon.png", 
+                "target": "rpm", 
+                "category": "Audio",
+                "maintainer": "Oskar <oskar@example.com>"
+              }
             }
           }' > desktop-app/package.json
           
