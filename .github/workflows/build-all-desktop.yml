@@ -1,8 +1,5 @@
-name: Build and Release Desktop
-on:
-  push:
-    tags:
-      - 'v*' # Budowanie i publikacja ruszą po wypchnięciu taga, np. git tag v1.0.1 && git push --tags
+name: Build and Release
+on: [push]
 
 jobs:
   build-and-release:
@@ -20,7 +17,7 @@ jobs:
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
           
-          # Dodanie logiki auto-updatera do main.js
+          # Przygotowanie main.js z auto-updaterem
           echo "const { app, BrowserWindow, Menu } = require('electron');
           const { autoUpdater } = require('electron-updater');
           function createWindow() {
@@ -35,7 +32,7 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Konfiguracja z auto-updaterem
+          # Przygotowanie package.json z konfiguracją publikacji
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
