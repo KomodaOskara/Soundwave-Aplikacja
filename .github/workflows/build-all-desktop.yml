@@ -36,7 +36,13 @@ jobs:
             "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
             "build": {
               "appId": "com.soundwave.app", 
-              "win": {"icon": "icon.png", "target": "nsis", "sign": false}
+              "win": {
+                "icon": "icon.png", 
+                "target": "nsis", 
+                "sign": false,
+                "certificateFile": null,
+                "verifyUpdateCodeSignature": false
+              }
             },
             "scripts": {"dist": "electron-builder"}
           }' > desktop-app/package.json
