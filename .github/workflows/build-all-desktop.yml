@@ -2,22 +2,20 @@ name: Build and Release
 on: [push]
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
+  build-windows:
+    runs-on: windows-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
-      - name: Build and Publish
+      - name: Build Windows
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          
-          # Przygotowanie main.js z auto-updaterem
           echo "const { app, BrowserWindow, Menu } = require('electron');
           const { autoUpdater } = require('electron-updater');
           function createWindow() {
@@ -32,7 +30,6 @@ jobs:
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
-          # Przygotowanie package.json z konfiguracją publikacji
           echo '{
             "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "main": "main.js",
@@ -42,14 +39,53 @@ jobs:
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "publish": {
-                "provider": "github",
-                "owner": "KomodaOskara",
-                "repo": "Soundwave-Aplikacja"
-              },
-              "win": {"icon": "icon.png", "target": "nsis"},
+              "publish": {"provider": "github", "owner": "KomodaOskara", "repo": "Soundwave-Aplikacja"},
+              "win": {"icon": "icon.png", "target": "nsis"}
+            }
+          }' > desktop-app/package.json
+          
+          cd desktop-app && npm install && npx electron-builder --win --publish always
+
+  build-linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Build Linux
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          mkdir desktop-app
+          cp icon.png desktop-app/icon.png
+          echo "const { app, BrowserWindow, Menu } = require('electron');
+          const { autoUpdater } = require('electron-updater');
+          function createWindow() {
+            const win = new BrowserWindow({ 
+              width: 1000, height: 800, 
+              icon: 'icon.png',
+              webPreferences: { nodeIntegration: true, webSecurity: false } 
+            });
+            Menu.setApplicationMenu(null);
+            win.loadURL('https://muzyka.komodaoskara.pl');
+            autoUpdater.checkForUpdatesAndNotify();
+          }
+          app.whenReady().then(createWindow);" > desktop-app/main.js
+          
+          echo '{
+            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
+            "main": "main.js",
+            "author": "Oskar <oskar@example.com>",
+            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
+            "dependencies": {"electron-updater": "^6.1.7"},
+            "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
+            "build": {
+              "appId": "com.soundwave.app",
+              "publish": {"provider": "github", "owner": "KomodaOskara", "repo": "Soundwave-Aplikacja"},
               "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio", "maintainer": "Oskar <oskar@example.com>"}
             }
           }' > desktop-app/package.json
           
-          cd desktop-app && npm install && npx electron-builder --win --linux --publish always
+          cd desktop-app && npm install && npx electron-builder --linux rpm --publish always
