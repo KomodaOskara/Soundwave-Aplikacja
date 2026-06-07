@@ -33,10 +33,10 @@ jobs:
               "appId": "com.soundwave.app", 
               "forceCodeSigning": false,
               "win": {"icon": "icon.png", "target": "nsis"}
-            },
-            "scripts": {"dist": "electron-builder --win --x64"}
+            }
           }' > desktop-app/package.json
-          cd desktop-app && npm install --network-timeout=100000 && npm run dist
+          
+          cd desktop-app && npm install && npx electron-builder --win --x64
       - uses: actions/upload-artifact@v4
         with:
           name: SoundWave-Windows
@@ -72,10 +72,10 @@ jobs:
             "build": {
               "appId": "com.soundwave.app", 
               "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"}
-            },
-            "scripts": {"dist": "electron-builder"}
+            }
           }' > desktop-app/package.json
-          cd desktop-app && npm install --network-timeout=100000 && npm run dist
+          
+          cd desktop-app && npm install && npx electron-builder --linux rpm
       - uses: actions/upload-artifact@v4
         with:
           name: SoundWave-Linux
