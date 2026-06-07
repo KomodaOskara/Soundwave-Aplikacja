@@ -12,13 +12,18 @@ jobs:
         shell: bash
         run: |
           mkdir desktop-app
+          cp icon.png desktop-app/icon.png
           echo "const { app, BrowserWindow } = require('electron');
           function createWindow() {
-            const win = new BrowserWindow({ width: 1000, height: 800, title: 'Soundwave' });
+            const win = new BrowserWindow({ 
+              width: 1000, height: 800, 
+              title: 'Soundwave',
+              webPreferences: { nodeIntegration: true, webSecurity: false } 
+            });
             win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
-          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "scripts": {"dist": "electron-builder --win"}}' > desktop-app/package.json
+          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "build": {"appId": "com.soundwave.app", "win": {"icon": "icon.png", "target": "nsis"}}, "scripts": {"dist": "electron-builder"}}' > desktop-app/package.json
           cd desktop-app && npm install && npm run dist
       - uses: actions/upload-artifact@v4
         with:
@@ -35,13 +40,18 @@ jobs:
         shell: bash
         run: |
           mkdir desktop-app
+          cp icon.png desktop-app/icon.png
           echo "const { app, BrowserWindow } = require('electron');
           function createWindow() {
-            const win = new BrowserWindow({ width: 1000, height: 800, title: 'Soundwave' });
-            win.loadURL('https://muzyka.komodaoskara.pl').catch(console.error);
+            const win = new BrowserWindow({ 
+              width: 1000, height: 800, 
+              title: 'Soundwave',
+              webPreferences: { nodeIntegration: true, webSecurity: false } 
+            });
+            win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
-          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "scripts": {"dist": "electron-builder --linux rpm"}}' > desktop-app/package.json
+          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "build": {"appId": "com.soundwave.app", "linux": {"icon": "icon.png", "target": "rpm"}}, "scripts": {"dist": "electron-builder"}}' > desktop-app/package.json
           cd desktop-app && npm install && npm run dist
       - uses: actions/upload-artifact@v4
         with:
