@@ -13,38 +13,29 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow } = require('electron');
+          echo "const { app, BrowserWindow, Menu } = require('electron');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
               title: 'Soundwave',
+              icon: 'icon.png',
               webPreferences: { nodeIntegration: true, webSecurity: false } 
             });
+            Menu.setApplicationMenu(null);
             win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
           echo '{
-            "name": "soundwave", 
-            "productName": "Soundwave", 
-            "version": "1.0.0", 
+            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0", 
             "author": "Oskar <oskar@example.com>",
-            "description": "Soundwave Music Player",
-            "license": "MIT",
-            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
-            "main": "main.js", 
-            "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
             "build": {
               "appId": "com.soundwave.app", 
               "forceCodeSigning": false,
-              "win": {
-                "icon": "icon.png", 
-                "target": "nsis"
-              }
+              "win": {"icon": "icon.png", "target": "nsis"}
             },
             "scripts": {"dist": "electron-builder --win --x64"}
           }' > desktop-app/package.json
-          
           cd desktop-app && npm install --network-timeout=100000 && npm run dist
       - uses: actions/upload-artifact@v4
         with:
@@ -62,34 +53,28 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow } = require('electron');
+          echo "const { app, BrowserWindow, Menu } = require('electron');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
               title: 'Soundwave',
+              icon: 'icon.png',
               webPreferences: { nodeIntegration: true, webSecurity: false } 
             });
+            Menu.setApplicationMenu(null);
             win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
           
           echo '{
-            "name": "soundwave", 
-            "productName": "Soundwave", 
-            "version": "1.0.0", 
+            "name": "soundwave", "productName": "Soundwave", "version": "1.0.0",
             "author": "Oskar <oskar@example.com>",
-            "description": "Soundwave Music Player",
-            "license": "MIT",
-            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
-            "main": "main.js", 
-            "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
             "build": {
               "appId": "com.soundwave.app", 
               "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"}
             },
             "scripts": {"dist": "electron-builder"}
           }' > desktop-app/package.json
-          
           cd desktop-app && npm install --network-timeout=100000 && npm run dist
       - uses: actions/upload-artifact@v4
         with:
