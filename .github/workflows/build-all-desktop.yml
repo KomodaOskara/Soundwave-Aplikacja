@@ -54,13 +54,14 @@ jobs:
       - name: Build Linux
         run: |
           mkdir desktop-app
-          cp icon.png desktop-app/icon.png
+          # Kluczowe: kopiujemy ikonę jako soundwave.png
+          cp icon.png desktop-app/soundwave.png
           echo "const { app, BrowserWindow, Menu } = require('electron');
           const path = require('path');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
-              icon: path.join(__dirname, 'icon.png'),
+              icon: path.join(__dirname, 'soundwave.png'),
               webPreferences: { nodeIntegration: true, webSecurity: false } 
             });
             Menu.setApplicationMenu(null);
@@ -80,14 +81,10 @@ jobs:
               "appId": "com.soundwave.app",
               "productName": "Soundwave",
               "linux": {
-                "icon": "icon.png",
+                "icon": "soundwave.png",
                 "target": "rpm",
                 "category": "Audio",
-                "maintainer": "Oskar <oskar@example.com>",
-                "desktop": {
-                  "Name": "Soundwave",
-                  "Icon": "icon.png"
-                }
+                "maintainer": "Oskar <oskar@example.com>"
               }
             }
           }' > desktop-app/package.json
