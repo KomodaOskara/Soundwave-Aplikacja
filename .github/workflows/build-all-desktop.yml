@@ -4,15 +4,11 @@ on: [push]
 jobs:
   build-windows:
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
       - name: Build Windows
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
@@ -39,24 +35,23 @@ jobs:
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "publish": {"provider": "github", "owner": "KomodaOskara", "repo": "Soundwave-Aplikacja"},
               "win": {"icon": "icon.png", "target": "nsis"}
             }
           }' > desktop-app/package.json
           
-          cd desktop-app && npm install && npx electron-builder --win --publish always
+          cd desktop-app && npm install && npx electron-builder --win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoundWave-Windows
+          path: desktop-app/dist/*.exe
 
   build-linux:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
       - name: Build Linux
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
@@ -83,9 +78,12 @@ jobs:
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "publish": {"provider": "github", "owner": "KomodaOskara", "repo": "Soundwave-Aplikacja"},
               "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio", "maintainer": "Oskar <oskar@example.com>"}
             }
           }' > desktop-app/package.json
           
-          cd desktop-app && npm install && npx electron-builder --linux rpm --publish always
+          cd desktop-app && npm install && npx electron-builder --linux rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoundWave-Linux
+          path: desktop-app/dist/*.rpm
