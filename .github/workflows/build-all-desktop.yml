@@ -12,12 +12,13 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow, Menu } = require('electron');
+          echo "const { app, BrowserWindow, Menu, nativeImage } = require('electron');
+          const path = require('path');
           const { autoUpdater } = require('electron-updater');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
-              icon: 'icon.png',
+              icon: path.join(__dirname, 'icon.png'),
               webPreferences: { nodeIntegration: true, webSecurity: false } 
             });
             Menu.setApplicationMenu(null);
@@ -35,7 +36,8 @@ jobs:
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "win": {"icon": "icon.png", "target": "nsis"}
+              "win": {"icon": "icon.png", "target": "nsis"},
+              "extraResources": ["icon.png"]
             }
           }' > desktop-app/package.json
           
@@ -55,12 +57,13 @@ jobs:
         run: |
           mkdir desktop-app
           cp icon.png desktop-app/icon.png
-          echo "const { app, BrowserWindow, Menu } = require('electron');
+          echo "const { app, BrowserWindow, Menu, nativeImage } = require('electron');
+          const path = require('path');
           const { autoUpdater } = require('electron-updater');
           function createWindow() {
             const win = new BrowserWindow({ 
               width: 1000, height: 800, 
-              icon: 'icon.png',
+              icon: path.join(__dirname, 'icon.png'),
               webPreferences: { nodeIntegration: true, webSecurity: false } 
             });
             Menu.setApplicationMenu(null);
@@ -78,7 +81,8 @@ jobs:
             "devDependencies": {"electron": "^29.4.6", "electron-builder": "^24.13.3"},
             "build": {
               "appId": "com.soundwave.app",
-              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio", "maintainer": "Oskar <oskar@example.com>"}
+              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio", "maintainer": "Oskar <oskar@example.com>"},
+              "extraResources": ["icon.png"]
             }
           }' > desktop-app/package.json
           
