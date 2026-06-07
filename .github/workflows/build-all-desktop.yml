@@ -36,15 +36,13 @@ jobs:
             "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
             "build": {
               "appId": "com.soundwave.app", 
+              "forceCodeSigning": false,
               "win": {
                 "icon": "icon.png", 
-                "target": "nsis", 
-                "sign": false,
-                "certificateFile": null,
-                "verifyUpdateCodeSignature": false
+                "target": "nsis"
               }
             },
-            "scripts": {"dist": "electron-builder"}
+            "scripts": {"dist": "electron-builder --win --x64"}
           }' > desktop-app/package.json
           
           cd desktop-app && npm install --network-timeout=100000 && npm run dist
