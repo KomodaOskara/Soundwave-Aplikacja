@@ -23,7 +23,23 @@ jobs:
             win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
-          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "build": {"appId": "com.soundwave.app", "win": {"icon": "icon.png", "target": "nsis"}}, "scripts": {"dist": "electron-builder"}}' > desktop-app/package.json
+          
+          echo '{
+            "name": "soundwave", 
+            "productName": "Soundwave", 
+            "version": "1.0.0", 
+            "author": "Oskar",
+            "license": "MIT",
+            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
+            "main": "main.js", 
+            "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
+            "build": {
+              "appId": "com.soundwave.app", 
+              "win": {"icon": "icon.png", "target": "nsis"}
+            },
+            "scripts": {"dist": "electron-builder"}
+          }' > desktop-app/package.json
+          
           cd desktop-app && npm install && npm run dist
       - uses: actions/upload-artifact@v4
         with:
@@ -51,7 +67,23 @@ jobs:
             win.loadURL('https://muzyka.komodaoskara.pl');
           }
           app.whenReady().then(createWindow);" > desktop-app/main.js
-          echo '{"name": "soundwave", "productName": "Soundwave", "version": "1.0.0", "main": "main.js", "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, "build": {"appId": "com.soundwave.app", "linux": {"icon": "icon.png", "target": "rpm"}}, "scripts": {"dist": "electron-builder"}}' > desktop-app/package.json
+          
+          echo '{
+            "name": "soundwave", 
+            "productName": "Soundwave", 
+            "version": "1.0.0", 
+            "author": "Oskar",
+            "license": "MIT",
+            "homepage": "https://github.com/KomodaOskara/Soundwave-Aplikacja",
+            "main": "main.js", 
+            "devDependencies": {"electron": "^29.0.0", "electron-builder": "^24.13.3"}, 
+            "build": {
+              "appId": "com.soundwave.app", 
+              "linux": {"icon": "icon.png", "target": "rpm", "category": "Audio"}
+            },
+            "scripts": {"dist": "electron-builder"}
+          }' > desktop-app/package.json
+          
           cd desktop-app && npm install && npm run dist
       - uses: actions/upload-artifact@v4
         with:
