@@ -1,0 +1,255 @@
+name: Zbuduj aplikację Android (APK)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz kod z repozytorium
+        uses: actions/checkout@v4
+
+      - name: Skonfiguruj Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Skonfiguruj JDK (Java) dla Androida
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Zainstaluj zależności npm
+        run: |
+          npm install --legacy-peer-deps
+          npm install @capacitor/android@6 --legacy-peer-deps
+          npm install -D @capacitor/assets --legacy-peer-deps
+
+      - name: Dodaj platformę Android (jeśli nie istnieje)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Platforma Android już istnieje, pomijam."
+          fi
+
+      - name: Instalacja biblioteki Pillow
+        run: python3 -m pip install Pillow
+
+      - name: Przygotowanie plików ikon
+        run: |
+          python3 - <<EOF
+          import os
+          from PIL import Image
+          icon_path = None
+          for root, dirs, files in os.walk('.'):
+              if any(p in root for p in ['node_modules','android','.git','.github','assets']):
+                  continue
+              for f in files:
+                  if f.lower() == 'icon.png':
+                      icon_path = os.path.join(root, f); break
+              if icon_path: break
+          if not icon_path:
+              print("BŁĄD: Nie znaleziono icon.png!"); exit(1)
+          img = Image.open(icon_path)
+          os.makedirs('assets', exist_ok=True)
+          for name in ['icon-only','icon-foreground','icon-background','splash','splash-dark']:
+              img.save(f'assets/{name}.png','PNG')
+          img.save('icon.png','PNG'); img.save('splash.png','PNG')
+          print(f"Ikony gotowe z: {icon_path}")
+          EOF
+
+      - name: Wygeneruj ikony i splash screeny
+        run: npx @capacitor/assets generate --android
+
+      # ════════════════════════════════════════════════════════════════════
+      # KLUCZOWY KROK: natywny MediaSession + JavascriptInterface
+      # ════════════════════════════════════════════════════════════════════
+      - name: Dodaj natywny MediaSession i uprawnienia audio
+        run: |
+          python3 - <<'PYEOF'
+          import os, glob, re
+
+          # ── 1. AndroidManifest.xml — uprawnienia ────────────────────────
+          manifest = 'android/app/src/main/AndroidManifest.xml'
+          if os.path.exists(manifest):
+              with open(manifest) as f: m = f.read()
+              perms = """
+          <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+          <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+          <uses-permission android:name="android.permission.WAKE_LOCK"/>
+          <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+          <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>"""
+              if 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' not in m:
+                  m = m.replace('</manifest>', perms + '\n</manifest>')
+                  print('✓ Uprawnienia audio dodane')
+              with open(manifest, 'w') as f: f.write(m)
+
+          # ── 2. MainActivity.java — natywny MediaSession + JavascriptInterface ──
+          # JavascriptInterface: bezpośredni most Java↔JS bez pluginu i bez bundlera.
+          # Działa z każdą wersją Capacitor. Tworzy natywny Android MediaSession
+          # widoczny dla Bluetooth, samochodów, ekranu blokady i powiadomień.
+          java_files = glob.glob('android/app/src/main/java/**/*.java', recursive=True)
+          main_activity = next((f for f in java_files if 'MainActivity' in f), None)
+
+          if main_activity:
+              with open(main_activity) as f: j = f.read()
+
+              # Dodaj importy
+              imports = """import android.media.session.MediaSession;
+          import android.media.session.PlaybackState;
+          import android.media.MediaMetadata;
+          import android.webkit.WebSettings;
+          import android.os.Handler;
+          import android.os.Looper;"""
+              if 'import android.media.session.MediaSession' not in j:
+                  j = j.replace(
+                      'import com.getcapacitor.BridgeActivity;',
+                      'import com.getcapacitor.BridgeActivity;\n' + imports
+                  )
+                  print('✓ Importy dodane do MainActivity')
+
+              # Dodaj pole klasy
+              if 'private MediaSession mMediaSession' not in j:
+                  j = j.replace(
+                      'public class MainActivity extends BridgeActivity {',
+                      'public class MainActivity extends BridgeActivity {\n    private MediaSession mMediaSession;\n    private final Handler mHandler = new Handler(Looper.getMainLooper());'
+                  )
+
+              # Konfiguracja WebView + natywny MediaSession
+              webview_setup = '''
+              // SoundWave: WebView config
+              try {
+                  getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
+                  getBridge().getWebView().getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+              } catch (Exception e) { e.printStackTrace(); }
+
+              // SoundWave: natywny MediaSession — widoczny dla Bluetooth, samochodu, ekranu blokady
+              // Działa niezależnie od navigator.mediaSession w WebView.
+              try {
+                  mMediaSession = new MediaSession(this, "SoundWavePlayer");
+                  mMediaSession.setActive(true);
+                  PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
+                      .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE |
+                                  PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS |
+                                  PlaybackState.ACTION_SEEK_TO);
+                  mMediaSession.setPlaybackState(stateBuilder.setState(
+                      PlaybackState.STATE_NONE, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f).build());
+                  // Callbacki z ekranu blokady/BT → JS
+                  mMediaSession.setCallback(new MediaSession.Callback() {
+                      private void js(String code) {
+                          mHandler.post(() -> getBridge().getWebView()
+                              .evaluateJavascript("try{" + code + "}catch(e){}", null));
+                      }
+                      @Override public void onPlay()          { js("window._swNativePlay&&_swNativePlay()"); }
+                      @Override public void onPause()         { js("window._swNativePause&&_swNativePause()"); }
+                      @Override public void onSkipToNext()    { js("window._swNativeNext&&_swNativeNext()"); }
+                      @Override public void onSkipToPrevious(){ js("window._swNativePrev&&_swNativePrev()"); }
+                      @Override public void onSeekTo(long posMs){ js("window._swNativeSeek&&_swNativeSeek(" + posMs + ")"); }
+                  });
+                  // JavascriptInterface: JS może aktualizować natywny MediaSession
+                  getBridge().getWebView().addJavascriptInterface(new Object() {
+                      @android.webkit.JavascriptInterface
+                      public boolean isAvailable() { return true; }
+
+                      @android.webkit.JavascriptInterface
+                      public void setMetadata(String title, String artist) {
+                          if (mMediaSession == null) return;
+                          mHandler.post(() -> {
+                              try {
+                                  mMediaSession.setMetadata(new MediaMetadata.Builder()
+                                      .putString(MediaMetadata.METADATA_KEY_TITLE,  title  != null ? title  : "")
+                                      .putString(MediaMetadata.METADATA_KEY_ARTIST, artist != null ? artist : "")
+                                      .putString(MediaMetadata.METADATA_KEY_ALBUM, "SoundWave")
+                                      .build());
+                              } catch (Exception e) { e.printStackTrace(); }
+                          });
+                      }
+
+                      @android.webkit.JavascriptInterface
+                      public void setPlaybackState(String state, long posMs, long durMs) {
+                          if (mMediaSession == null) return;
+                          mHandler.post(() -> {
+                              try {
+                                  int s = "playing".equals(state) ?
+                                      PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
+                                  mMediaSession.setPlaybackState(new PlaybackState.Builder()
+                                      .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE |
+                                                  PlaybackState.ACTION_SKIP_TO_NEXT |
+                                                  PlaybackState.ACTION_SKIP_TO_PREVIOUS |
+                                                  PlaybackState.ACTION_SEEK_TO)
+                                      .setState(s, posMs, 1.0f)
+                                      .setExtras(android.os.Bundle.EMPTY)
+                                      .build());
+                              } catch (Exception e) { e.printStackTrace(); }
+                          });
+                      }
+                  }, "SoundWaveNative");
+                  System.out.println("SoundWave: natywny MediaSession + JavascriptInterface gotowy");
+              } catch (Exception e) {
+                  e.printStackTrace();
+              }'''
+
+              if 'SoundWavePlayer' not in j:
+                  j = j.replace(
+                      'super.onCreate(savedInstanceState);',
+                      'super.onCreate(savedInstanceState);' + webview_setup
+                  )
+                  print('✓ Natywny MediaSession + JavascriptInterface dodany do MainActivity')
+              else:
+                  print('✓ MediaSession już skonfigurowany')
+
+              # onDestroy — zwalniamy MediaSession
+              if 'mMediaSession.release()' not in j:
+                  destroy_code = '''
+              @Override
+              protected void onDestroy() {
+                  super.onDestroy();
+                  if (mMediaSession != null) {
+                      mMediaSession.setActive(false);
+                      mMediaSession.release();
+                      mMediaSession = null;
+                  }
+              }'''
+                  # Wstaw przed ostatnią } w klasie
+                  last_brace = j.rfind('}')
+                  j = j[:last_brace] + destroy_code + '\n' + j[last_brace:]
+                  print('✓ onDestroy() dodany')
+
+              with open(main_activity, 'w') as f: f.write(j)
+          else:
+              print('WARN: MainActivity.java nie znaleziony')
+
+          # ── 3. network_security_config.xml ──────────────────────────────
+          xml_dir = 'android/app/src/main/res/xml'
+          os.makedirs(xml_dir, exist_ok=True)
+          net_cfg = os.path.join(xml_dir, 'network_security_config.xml')
+          if not os.path.exists(net_cfg):
+              with open(net_cfg,'w') as f:
+                  f.write('''<?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+              <domain-config cleartextTrafficPermitted="false">
+                  <domain includeSubdomains="true">muzyka.komodaoskara.pl</domain>
+              </domain-config>
+          </network-security-config>''')
+              print('✓ network_security_config.xml dodany')
+
+          print('✓ Konfiguracja Android zakończona')
+          PYEOF
+
+      - name: Zsynchronizuj frontend do Androida
+        run: npx cap sync android
+
+      - name: Zbuduj APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Udostępnij APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Soundwave-Android-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
