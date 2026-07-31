@@ -27,10 +27,15 @@ jobs:
           npm install @capacitor/android@6 --legacy-peer-deps
           npm install -D @capacitor/assets --legacy-peer-deps
 
-      - name: Dodaj platformę Android (jeśli nie istnieje)
+      # ── KLUCZOWE: zawsze świeży android/ ─────────────────────────────────
+      # Stary android/ w repo miał już SoundWaveNative z poprzedniego builda
+      # (z jednym try-catch gdzie exception blokowała addJavascriptInterface).
+      # Workflow widział 'SoundWaveNative' w pliku i pomijał patching.
+      # Rozwiązanie: zawsze regeneruj — gwarantuje czyste MainActivity.java.
+      - name: Usuń stary android/ i wygeneruj świeży
         run: |
-          if [ ! -d "android" ]; then npx cap add android
-          else echo "Android już istnieje, pomijam."; fi
+          rm -rf android
+          npx cap add android
 
       - name: Instalacja Pillow
         run: python3 -m pip install Pillow
@@ -52,7 +57,7 @@ jobs:
           for n in ['icon-only','icon-foreground','icon-background','splash','splash-dark']:
               img.save(f'assets/{n}.png','PNG')
           img.save('icon.png','PNG'); img.save('splash.png','PNG')
-          print(f"Ikony gotowe: {icon_path}")
+          print(f"OK: {icon_path}")
           EOF
 
       - name: Wygeneruj ikony
@@ -63,162 +68,170 @@ jobs:
           python3 - <<'PYEOF'
           import os, glob
 
-          # ── 1. Uprawnienia w AndroidManifest.xml ────────────────────────
+          # ── 1. Uprawnienia ───────────────────────────────────────────────
           manifest = 'android/app/src/main/AndroidManifest.xml'
-          if os.path.exists(manifest):
-              with open(manifest) as f: m = f.read()
-              perms = """
+          with open(manifest) as f: m = f.read()
+          perms = """
           <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
           <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
           <uses-permission android:name="android.permission.WAKE_LOCK"/>
-          <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
           <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>"""
-              if 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' not in m:
-                  m = m.replace('</manifest>', perms + '\n</manifest>')
-                  print('✓ Uprawnienia dodane')
-              with open(manifest, 'w') as f: f.write(m)
+          if 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' not in m:
+              m = m.replace('</manifest>', perms + '\n</manifest>')
+          with open(manifest, 'w') as f: f.write(m)
+          print('✓ Uprawnienia OK')
 
-          # ── 2. MainActivity.java ─────────────────────────────────────────
+          # ── 2. MainActivity.java — świeży plik, zawsze patchujemy ────────
           java_files = glob.glob('android/app/src/main/java/**/*.java', recursive=True)
           main_activity = next((f for f in java_files if 'MainActivity' in f), None)
-          if not main_activity:
-              print('WARN: MainActivity.java nie znaleziony'); exit(0)
+          assert main_activity, 'MainActivity.java nie znaleziony!'
+          print(f'Patchuję: {main_activity}')
 
           with open(main_activity) as f: j = f.read()
 
           # Importy
-          imports = (
-              'import android.media.session.MediaSession;\n'
-              'import android.media.session.PlaybackState;\n'
-              'import android.media.MediaMetadata;\n'
-              'import android.webkit.WebSettings;\n'
-              'import android.os.Handler;\n'
-              'import android.os.Looper;\n'
-          )
-          if 'import android.media.session.MediaSession' not in j:
-              j = j.replace('import com.getcapacitor.BridgeActivity;',
-                            'import com.getcapacitor.BridgeActivity;\n' + imports)
+          imports = ('import android.media.session.MediaSession;\n'
+                     'import android.media.session.PlaybackState;\n'
+                     'import android.media.MediaMetadata;\n'
+                     'import android.webkit.WebSettings;\n'
+                     'import android.os.Handler;\n'
+                     'import android.os.Looper;\n')
+          j = j.replace('import com.getcapacitor.BridgeActivity;',
+                        'import com.getcapacitor.BridgeActivity;\n' + imports)
 
           # Pole klasy
-          if 'private MediaSession mMediaSession' not in j:
-              j = j.replace('public class MainActivity extends BridgeActivity {',
-                            'public class MainActivity extends BridgeActivity {\n'
-                            '    private MediaSession mMediaSession;\n'
-                            '    private final Handler mMainHandler = new Handler(Looper.getMainLooper());')
+          j = j.replace(
+              'public class MainActivity extends BridgeActivity {',
+              'public class MainActivity extends BridgeActivity {\n'
+              '    private MediaSession mMediaSession;\n'
+              '    private final Handler mMainHandler = new Handler(Looper.getMainLooper());')
 
-          if 'SoundWaveNative' not in j:
-              # KLUCZOWE: Dwa ODDZIELNE try-catch bloki
-              # Blok 1: JavascriptInterface — MUSI działać niezależnie
-              # Blok 2: MediaSession — opcjonalny, nie blokuje bloku 1
-              setup = r'''
-              // ── Blok 1: JavascriptInterface (MUST) ──────────────────────
-              // Osobny try-catch — nawet jeśli MediaSession rzuci wyjątek,
-              // JavascriptInterface i tak zostanie zarejestrowany.
-              // Bez tego window.SoundWaveNative = undefined w JS.
+          # Główny setup — dwa NIEZALEŻNE try-catch
+          setup = r'''
+              // ════ BLOK 1: JavascriptInterface (KRYTYCZNY) ════════════════
+              // Osobny try-catch: zawsze działa niezależnie od MediaSession.
+              // Bez tego window.SoundWaveNative = undefined.
               try {
-                  getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
-                  getBridge().getWebView().getSettings().setMixedContentMode(
-                      WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-                  getBridge().getWebView().addJavascriptInterface(new Object() {
-                      @android.webkit.JavascriptInterface
-                      public boolean isAvailable() { return true; }
-
-                      @android.webkit.JavascriptInterface
-                      public void setMetadata(final String title, final String artist) {
-                          mMainHandler.post(() -> {
-                              if (mMediaSession == null) return;
-                              try {
-                                  mMediaSession.setMetadata(new MediaMetadata.Builder()
-                                      .putString(MediaMetadata.METADATA_KEY_TITLE,  title  != null ? title  : "")
-                                      .putString(MediaMetadata.METADATA_KEY_ARTIST, artist != null ? artist : "")
-                                      .putString(MediaMetadata.METADATA_KEY_ALBUM, "SoundWave")
-                                      .build());
-                              } catch (Exception ignored) {}
-                          });
-                      }
-
-                      @android.webkit.JavascriptInterface
-                      public void setPlaybackState(final String state, final long posMs, final long durMs) {
-                          mMainHandler.post(() -> {
-                              if (mMediaSession == null) return;
-                              try {
-                                  int s = "playing".equals(state) ?
-                                      PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
-                                  mMediaSession.setPlaybackState(new PlaybackState.Builder()
-                                      .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE |
-                                                  PlaybackState.ACTION_SKIP_TO_NEXT |
-                                                  PlaybackState.ACTION_SKIP_TO_PREVIOUS |
-                                                  PlaybackState.ACTION_SEEK_TO)
-                                      .setState(s, posMs, 1.0f)
-                                      .build());
-                              } catch (Exception ignored) {}
-                          });
-                      }
-                  }, "SoundWaveNative");
-                  android.util.Log.d("SoundWave", "JavascriptInterface 'SoundWaveNative' registered OK");
+                  if (getBridge() != null && getBridge().getWebView() != null) {
+                      getBridge().getWebView().getSettings()
+                          .setMediaPlaybackRequiresUserGesture(false);
+                      getBridge().getWebView().addJavascriptInterface(
+                          new SoundWaveBridge(), "SoundWaveNative");
+                      android.util.Log.d("SW", "JavascriptInterface OK");
+                  }
               } catch (Exception e1) {
-                  android.util.Log.e("SoundWave", "JavascriptInterface FAILED: " + e1.getMessage());
+                  android.util.Log.e("SW", "JavascriptInterface FAILED: " + e1);
               }
 
-              // ── Blok 2: Natywny MediaSession (OPTIONAL) ─────────────────
-              // Oddzielny try-catch — nie może zablokować bloku 1.
+              // ════ BLOK 2: Natywny MediaSession (opcjonalny) ══════════════
               try {
                   mMediaSession = new MediaSession(this, "SoundWavePlayer");
                   mMediaSession.setActive(true);
                   mMediaSession.setPlaybackState(new PlaybackState.Builder()
-                      .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE |
-                                  PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS |
-                                  PlaybackState.ACTION_SEEK_TO)
-                      .setState(PlaybackState.STATE_NONE, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+                      .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
+                          | PlaybackState.ACTION_SKIP_TO_NEXT
+                          | PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                          | PlaybackState.ACTION_SEEK_TO)
+                      .setState(PlaybackState.STATE_NONE,
+                                PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f)
                       .build());
-                  mMediaSession.setCallback(new MediaSession.Callback() {
+                  final MediaSession.Callback cb = new MediaSession.Callback() {
                       private void js(String code) {
-                          mMainHandler.post(() -> getBridge().getWebView()
-                              .evaluateJavascript("try{" + code + "}catch(e){}", null));
+                          mMainHandler.post(() -> {
+                              if (getBridge() != null && getBridge().getWebView() != null)
+                                  getBridge().getWebView().evaluateJavascript(
+                                      "try{" + code + "}catch(e){}", null);
+                          });
                       }
-                      @Override public void onPlay()             { js("window._swNativePlay&&_swNativePlay()"); }
-                      @Override public void onPause()            { js("window._swNativePause&&_swNativePause()"); }
-                      @Override public void onSkipToNext()       { js("window._swNativeNext&&_swNativeNext()"); }
-                      @Override public void onSkipToPrevious()   { js("window._swNativePrev&&_swNativePrev()"); }
-                      @Override public void onSeekTo(long posMs) { js("window._swNativeSeek&&_swNativeSeek(" + posMs + ")"); }
-                  });
-                  android.util.Log.d("SoundWave", "Native MediaSession registered OK");
+                      @Override public void onPlay()           { js("window._swNativePlay&&_swNativePlay()"); }
+                      @Override public void onPause()          { js("window._swNativePause&&_swNativePause()"); }
+                      @Override public void onSkipToNext()     { js("window._swNativeNext&&_swNativeNext()"); }
+                      @Override public void onSkipToPrevious() { js("window._swNativePrev&&_swNativePrev()"); }
+                      @Override public void onSeekTo(long ms)  { js("window._swNativeSeek&&_swNativeSeek("+ms+")"); }
+                  };
+                  mMediaSession.setCallback(cb);
+                  android.util.Log.d("SW", "MediaSession OK");
               } catch (Exception e2) {
-                  android.util.Log.e("SoundWave", "MediaSession FAILED: " + e2.getMessage());
+                  android.util.Log.e("SW", "MediaSession FAILED: " + e2);
               }'''
 
-              j = j.replace('super.onCreate(savedInstanceState);',
-                            'super.onCreate(savedInstanceState);' + setup)
-              print('✓ JavascriptInterface + MediaSession dodane (2 niezależne bloki)')
+          j = j.replace('super.onCreate(savedInstanceState);',
+                        'super.onCreate(savedInstanceState);' + setup)
 
-          # onDestroy (PUBLIC, nie protected)
-          if 'mMediaSession.release()' not in j:
-              destroy = '''
+          # Inner class SoundWaveBridge (nazwana, nie anonimowa — lepsza zgodność z Android)
+          bridge_class = r'''
+              // ─── SoundWaveBridge: named inner class dla pewnego JavascriptInterface ───
+              // Anonimowe klasy mogą mieć problemy z @JavascriptInterface w niektórych
+              // wersjach Android. Nazwana klasa wewnętrzna jest bardziej niezawodna.
+              class SoundWaveBridge {
+                  @android.webkit.JavascriptInterface
+                  public boolean isAvailable() { return true; }
+
+                  @android.webkit.JavascriptInterface
+                  public void setMetadata(final String title, final String artist) {
+                      mMainHandler.post(() -> {
+                          if (mMediaSession == null) return;
+                          try {
+                              mMediaSession.setMetadata(new MediaMetadata.Builder()
+                                  .putString(MediaMetadata.METADATA_KEY_TITLE,
+                                             title  != null ? title  : "")
+                                  .putString(MediaMetadata.METADATA_KEY_ARTIST,
+                                             artist != null ? artist : "")
+                                  .putString(MediaMetadata.METADATA_KEY_ALBUM, "SoundWave")
+                                  .build());
+                          } catch (Exception ignored) {}
+                      });
+                  }
+
+                  @android.webkit.JavascriptInterface
+                  public void setPlaybackState(final String state,
+                                               final long posMs, final long durMs) {
+                      mMainHandler.post(() -> {
+                          if (mMediaSession == null) return;
+                          try {
+                              int s = "playing".equals(state) ?
+                                  PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
+                              mMediaSession.setPlaybackState(new PlaybackState.Builder()
+                                  .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE
+                                      | PlaybackState.ACTION_SKIP_TO_NEXT
+                                      | PlaybackState.ACTION_SKIP_TO_PREVIOUS
+                                      | PlaybackState.ACTION_SEEK_TO)
+                                  .setState(s, posMs, 1.0f)
+                                  .build());
+                          } catch (Exception ignored) {}
+                      });
+                  }
+              }'''
+
+          # onDestroy
+          destroy = '''
               @Override
               public void onDestroy() {
                   super.onDestroy();
                   if (mMediaSession != null) {
-                      try { mMediaSession.setActive(false); mMediaSession.release(); } catch (Exception ignored) {}
+                      try { mMediaSession.setActive(false); mMediaSession.release(); }
+                      catch (Exception ignored) {}
                       mMediaSession = null;
                   }
               }'''
-              j = j[:j.rfind('}')] + destroy + '\n}'
+
+          # Wstaw inner class i onDestroy przed ostatnią }
+          last = j.rfind('}')
+          j = j[:last] + bridge_class + destroy + '\n}'
 
           with open(main_activity, 'w') as f: f.write(j)
-          print(f'✓ MainActivity: {main_activity}')
+          print('✓ MainActivity.java patchowany')
 
           # ── 3. network_security_config.xml ──────────────────────────────
           os.makedirs('android/app/src/main/res/xml', exist_ok=True)
-          net_cfg = 'android/app/src/main/res/xml/network_security_config.xml'
-          if not os.path.exists(net_cfg):
-              with open(net_cfg,'w') as f:
-                  f.write('<?xml version="1.0" encoding="utf-8"?>\n'
-                          '<network-security-config>\n'
-                          '  <domain-config cleartextTrafficPermitted="false">\n'
-                          '    <domain includeSubdomains="true">muzyka.komodaoskara.pl</domain>\n'
-                          '  </domain-config>\n'
-                          '</network-security-config>')
-          print('✓ Konfiguracja zakończona')
+          with open('android/app/src/main/res/xml/network_security_config.xml','w') as f:
+              f.write('<?xml version="1.0" encoding="utf-8"?>\n'
+                      '<network-security-config>\n'
+                      '  <domain-config cleartextTrafficPermitted="false">\n'
+                      '    <domain includeSubdomains="true">muzyka.komodaoskara.pl</domain>\n'
+                      '  </domain-config>\n'
+                      '</network-security-config>')
+          print('✓ Wszystko OK')
           PYEOF
 
       - name: Zsynchronizuj frontend
