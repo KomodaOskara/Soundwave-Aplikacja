@@ -58,7 +58,7 @@ jobs:
       - name: Wygeneruj ikony
         run: npx @capacitor/assets generate --android
 
-      - name: Konfiguracja Android: AudioFocus + uprawnienia + WebView
+      - name: "Konfiguracja Android - AudioFocus + uprawnienia + WebView"
         run: |
           python3 - <<'PYEOF'
           import os, glob
