@@ -30,6 +30,11 @@ name: Zbuduj aplikację Android (APK)
 
 on:
   workflow_dispatch:
+    inputs:
+      android_auto:
+        description: 'Wsparcie Android Auto (natywny odtwarzacz media3)'
+        type: boolean
+        default: true
 
 jobs:
   build-android:
@@ -139,6 +144,23 @@ jobs:
 
           with open(main_activity) as f: j = f.read()
 
+          # Capacitor generuje klase PUSTA: `public class MainActivity extends
+          # BridgeActivity {}`. Nie ma w niej zadnego onCreate, wiec kazda latka
+          # szukajaca `super.onCreate(savedInstanceState);` byla dotad cicho
+          # pomijana - AudioFocus i ustawienia WebView NIGDY nie trafily do APK.
+          # Najpierw wiec dopisujemy szkielet onCreate, a dopiero potem laty.
+          if 'onCreate' not in j:
+              j = re.sub(r'public class MainActivity extends BridgeActivity\s*\{\s*\}',
+                         'public class MainActivity extends BridgeActivity {\n'
+                         '    @Override\n'
+                         '    public void onCreate(android.os.Bundle savedInstanceState) {\n'
+                         '        super.onCreate(savedInstanceState);\n'
+                         '    }\n'
+                         '}', j)
+              assert 'super.onCreate(savedInstanceState);' in j, \
+                     'Nie udalo sie dodac onCreate do MainActivity'
+              print('+ dodano szkielet onCreate (klasa byla pusta)')
+
           imports = (
               'import android.media.AudioAttributes;\n'
               'import android.media.AudioFocusRequest;\n'
@@ -230,6 +252,120 @@ jobs:
                       '  </domain-config>\n</network-security-config>')
           print('✓ Wszystko gotowe')
           PYEOF
+
+      - name: "Android Auto - natywny odtwarzacz (media3)"
+        if: ${{ inputs.android_auto }}
+        run: |
+          set -e
+          PKG_DIR=$(dirname "$(find android/app/src/main/java -name MainActivity.java | head -1)")
+          echo "Pakiet aplikacji: $PKG_DIR"
+
+          # Zrodla natywne trzymamy jako PLIKI w repo (katalog native/), a nie
+          # jako latki tekstowe w tym workflow - kilkaset linii Javy sklejanej
+          # stringami byloby nie do utrzymania.
+          cp native/SoundwaveAuth.java         "$PKG_DIR/"
+          cp native/SoundwaveApi.java          "$PKG_DIR/"
+          cp native/SoundwaveMediaService.java "$PKG_DIR/"
+          mkdir -p android/app/src/main/res/xml
+          cp native/automotive_app_desc.xml android/app/src/main/res/xml/
+
+          cat > /tmp/auto_patch.py <<'AUTOPATCH'
+          import glob
+
+          # ---- build.gradle: media3 przypiete na 1.4.1 ----------------------
+          # 1.5+ wymaga compileSdk 35, a Capacitor 6 ustawia 34. To ostatnia
+          # wersja dzialajaca bez ruszania konfiguracji Capacitora.
+          gp = "android/app/build.gradle"
+          g = open(gp).read()
+          if "media3-session" not in g:
+              g = g.replace("dependencies {",
+                            'dependencies {\n'
+                            '    implementation "androidx.media3:media3-exoplayer:1.4.1"\n'
+                            '    implementation "androidx.media3:media3-session:1.4.1"', 1)
+          # API sesji media3 jest oznaczone jako niestabilne - bez tego lint
+          # potrafi wywalic build na UnsafeOptInUsageError.
+          if "abortOnError false" not in g:
+              g = g.replace("android {",
+                            "android {\n    lint {\n        abortOnError false\n    }", 1)
+          open(gp, "w").write(g)
+          print("OK build.gradle")
+
+          # ---- AndroidManifest: serwis + deklaracja dla Auto ----------------
+          mp = "android/app/src/main/AndroidManifest.xml"
+          m = open(mp).read()
+          if "SoundwaveMediaService" not in m:
+              svc = (
+                  '\n        <service\n'
+                  '            android:name=".SoundwaveMediaService"\n'
+                  '            android:exported="true"\n'
+                  '            android:foregroundServiceType="mediaPlayback">\n'
+                  '            <intent-filter>\n'
+                  '                <action android:name="androidx.media3.session.MediaLibraryService" />\n'
+                  '                <action android:name="android.media.browse.MediaBrowserService" />\n'
+                  '            </intent-filter>\n'
+                  '        </service>\n\n'
+                  '        <meta-data\n'
+                  '            android:name="com.google.android.gms.car.application"\n'
+                  '            android:resource="@xml/automotive_app_desc" />\n'
+              )
+              m = m.replace("</application>", svc + "    </application>", 1)
+              open(mp, "w").write(m)
+          print("OK AndroidManifest")
+
+          # ---- MainActivity: podanie WebView i danych logowania -------------
+          ma = [f for f in glob.glob("android/app/src/main/java/**/*.java", recursive=True)
+                if "MainActivity" in f][0]
+          j = open(ma).read()
+          # Zabezpieczenie na wypadek uruchomienia bez wczesniejszego kroku
+          # konfiguracji - bez onCreate nie ma gdzie wstrzykiwac.
+          assert "super.onCreate(savedInstanceState);" in j, \
+                 "MainActivity nie ma onCreate - krok konfiguracji nie wykonal sie poprawnie"
+          if "SoundwaveMediaService.attachWebView" not in j:
+              j = j.replace("super.onCreate(savedInstanceState);",
+                  "super.onCreate(savedInstanceState);\n"
+                  "\n"
+                  "        // Android Auto: natywny odtwarzacz musi umiec wyciszyc WebView,\n"
+                  "        // zeby dwa odtwarzacze nie graly jednoczesnie.\n"
+                  "        try {\n"
+                  "            SoundwaveMediaService.attachWebView(getBridge().getWebView());\n"
+                  "        } catch (Exception e) { e.printStackTrace(); }", 1)
+              extra = (
+                  "\n"
+                  "    @Override\n"
+                  "    public void onResume() {\n"
+                  "        super.onResume();\n"
+                  "        try {\n"
+                  "            final android.webkit.WebView wv = getBridge().getWebView();\n"
+                  "            SoundwaveAuth.syncFromWebView(this, wv);\n"
+                  "            // Przy zimnym starcie strona bywa jeszcze niezaladowana i nie ma\n"
+                  "            // tokenu w localStorage - druga proba po chwili to domyka.\n"
+                  "            wv.postDelayed(new Runnable() {\n"
+                  "                @Override public void run() {\n"
+                  "                    SoundwaveAuth.syncFromWebView(MainActivity.this, wv);\n"
+                  "                }\n"
+                  "            }, 5000);\n"
+                  "        } catch (Exception e) { e.printStackTrace(); }\n"
+                  "    }\n"
+              )
+              last = j.rfind("}")
+              j = j[:last] + extra + "}\n"
+              open(ma, "w").write(j)
+          print("OK MainActivity")
+          AUTOPATCH
+          python3 /tmp/auto_patch.py
+
+      - name: "Android Auto - kontrola przed buildem"
+        if: ${{ inputs.android_auto }}
+        run: |
+          PKG_DIR=$(dirname "$(find android/app/src/main/java -name MainActivity.java | head -1)")
+          for f in SoundwaveAuth.java SoundwaveApi.java SoundwaveMediaService.java; do
+            test -f "$PKG_DIR/$f" || { echo "BRAK $f"; exit 1; }
+          done
+          test -f android/app/src/main/res/xml/automotive_app_desc.xml || { echo "BRAK automotive_app_desc.xml"; exit 1; }
+          grep -q SoundwaveMediaService android/app/src/main/AndroidManifest.xml || { echo "BRAK serwisu w manifescie"; exit 1; }
+          grep -q media3-session android/app/build.gradle || { echo "BRAK zaleznosci media3"; exit 1; }
+          grep -q attachWebView "$PKG_DIR/MainActivity.java" || { echo "MainActivity nie zostal zalatany"; exit 1; }
+          echo "Wszystkie elementy Android Auto na miejscu"
 
       - name: Zsynchronizuj frontend
         run: npx cap sync android
