@@ -1,5 +1,33 @@
 name: Zbuduj aplikację Android (APK)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# WERSJA v102 — naprawiony MediaSession na Androidzie
+#
+# CO BYŁO NIE TAK:
+# WebView Androida NIE implementuje Media Session Web API. `navigator.mediaSession`
+# jest tam po prostu undefined — dlatego apka logowała "MediaSession NOT supported
+# in this browser/mode" i nie było ani kontrolek na ekranie blokady, ani metadanych
+# w powiadomieniu. Na iOS działało, bo tam WebView to WebKit z pełnym wsparciem.
+#
+# Poprzednia wersja workflowu ustawiała tylko AudioFocus (dźwięk w tle grał, ale
+# bez kontrolek) i świadomie rezygnowała z JavascriptInterface. Zostawiało to
+# aplikację BEZ jakiegokolwiek backendu MediaSession.
+#
+# CO ROBI TA WERSJA:
+# Instaluje natywny plugin @jofr/capacitor-media-session (Capacitor 6). Plugin
+# stawia prawdziwą androidową MediaSessionCompat + foreground service z
+# powiadomieniem MediaStyle — czyli kontrolki na ekranie blokady, w powiadomieniach,
+# na słuchawkach BT i w samochodzie.
+#
+# Bundler NIE jest potrzebny: bridge Capacitora sam wystawia
+# window.Capacitor.Plugins.MediaSession na podstawie PluginHeaders, a frontend
+# (index.html v102) właśnie tego szuka.
+#
+# WYMAGANE: www/index.html musi być w wersji v102 — starsze wydania miały
+# w updateMediaSession() guard `if (!_hasNativeMS && !_msPlugin) return;`,
+# który wycinał ścieżkę pluginu, więc sama instalacja pluginu nic by nie dała.
+# ══════════════════════════════════════════════════════════════════════════════
+
 on:
   workflow_dispatch:
 
@@ -25,12 +53,26 @@ jobs:
         run: |
           npm install --legacy-peer-deps
           npm install @capacitor/android@6 --legacy-peer-deps
+          # Plugin MediaSession — MUSI być zainstalowany PRZED `cap add android`,
+          # żeby projekt androidowy wciągnął go jako moduł natywny.
+          npm install @jofr/capacitor-media-session@4 --legacy-peer-deps
           npm install -D @capacitor/assets --legacy-peer-deps
 
       - name: Usuń stary android/ i wygeneruj świeży
         run: |
           rm -rf android
           npx cap add android
+
+      - name: Sprawdź czy plugin MediaSession został wpięty
+        run: |
+          echo "── Wpięte pluginy Capacitora ──"
+          cat android/capacitor.settings.gradle
+          if ! grep -q "capacitor-media-session" android/capacitor.settings.gradle; then
+            echo "❌ BŁĄD: plugin @jofr/capacitor-media-session NIE został wpięty do projektu."
+            echo "   Bez niego APK znowu nie będzie miał kontrolek na ekranie blokady."
+            exit 1
+          fi
+          echo "✅ Plugin MediaSession wpięty poprawnie"
 
       - name: Instalacja Pillow
         run: python3 -m pip install Pillow
@@ -58,29 +100,39 @@ jobs:
       - name: Wygeneruj ikony
         run: npx @capacitor/assets generate --android
 
-      - name: "Konfiguracja Android - AudioFocus + uprawnienia + WebView"
+      - name: "Konfiguracja Android - uprawnienia + AudioFocus + WebView"
         run: |
           python3 - <<'PYEOF'
-          import os, glob
+          import os, glob, re
 
           # ── 1. Uprawnienia ────────────────────────────────────────────────
           manifest = 'android/app/src/main/AndroidManifest.xml'
           with open(manifest) as f: m = f.read()
-          perms = """
-          <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-          <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-          <uses-permission android:name="android.permission.WAKE_LOCK"/>
-          <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>"""
-          if 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' not in m:
-              m = m.replace('</manifest>', perms + '\n</manifest>')
+
+          needed = [
+              'android.permission.FOREGROUND_SERVICE',
+              # Wymagane od Androida 14 dla foreground service typu mediaPlayback
+              # (plugin deklaruje foregroundServiceType="mediaPlayback").
+              'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+              'android.permission.WAKE_LOCK',
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+              # KLUCZOWE od Androida 13: bez POST_NOTIFICATIONS powiadomienie
+              # foreground service NIE jest pokazywane — usługa działa, ale
+              # kontrolek na ekranie blokady nie widać. Tego brakowało wcześniej.
+              'android.permission.POST_NOTIFICATIONS',
+          ]
+          add = ''.join(
+              f'\n    <uses-permission android:name="{p}"/>'
+              for p in needed if p not in m
+          )
+          if add:
+              m = m.replace('</manifest>', add + '\n</manifest>')
           with open(manifest, 'w') as f: f.write(m)
           print('✓ Uprawnienia OK')
 
-          # ── 2. MainActivity.java — AudioFocus + WebView config ───────────
-          # UPROSZCZONE: tylko requestAudioFocus i WebView settings.
-          # Bez JavascriptInterface — nie działa reliably w Android 17 + Capacitor 6.
-          # requestAudioFocus mówi Androidowi "jesteśmy odtwarzaczem muzyki" →
-          # Android nie wycisza naszego audio w tle.
+          # ── 2. MainActivity.java ──────────────────────────────────────────
+          # AudioFocus + ustawienia WebView + prośba o POST_NOTIFICATIONS.
+          # Sam MediaSession obsługuje plugin — tu go nie dotykamy.
           java_files = glob.glob('android/app/src/main/java/**/*.java', recursive=True)
           main_activity = next((f for f in java_files if 'MainActivity' in f), None)
           assert main_activity, 'MainActivity.java nie znaleziony!'
@@ -96,7 +148,6 @@ jobs:
           j = j.replace('import com.getcapacitor.BridgeActivity;',
                         'import com.getcapacitor.BridgeActivity;\n' + imports)
 
-          # Pole dla AudioFocusRequest (żeby trzymać referencję)
           j = j.replace(
               'public class MainActivity extends BridgeActivity {',
               'public class MainActivity extends BridgeActivity {\n'
@@ -111,10 +162,25 @@ jobs:
                       .setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
               } catch (Exception e) { e.printStackTrace(); }
 
-              // ── AudioFocus: kluczowe dla dźwięku w tle ──────────────────
-              // Bez tego Android wycisza audio apps które nie mają MediaSession.
-              // requestAudioFocus(GAIN) = "jesteśmy muzyką, chcemy pełny focus"
-              // Android zachowuje nasz audio output nawet przy zablokowanym ekranie.
+              // ── POST_NOTIFICATIONS (Android 13+) ────────────────────────
+              // Plugin MediaSession pokazuje kontrolki przez powiadomienie
+              // foreground service. Od API 33 bez zgody użytkownika to
+              // powiadomienie jest po cichu ukrywane — czyli brak kontrolek
+              // na ekranie blokady mimo działającego serwisu.
+              try {
+                  if (android.os.Build.VERSION.SDK_INT >= 33) {
+                      if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                              != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                          requestPermissions(
+                              new String[]{"android.permission.POST_NOTIFICATIONS"}, 8801);
+                      }
+                  }
+              } catch (Exception e) { e.printStackTrace(); }
+
+              // ── AudioFocus ──────────────────────────────────────────────
+              // Plugin MediaSession sam NIE prosi o audio focus, więc zostaje
+              // to tutaj: mówi Androidowi "jesteśmy odtwarzaczem muzyki",
+              // dzięki czemu system nie wycisza nas w tle.
               try {
                   AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
                   mAudioFocusRequest = new AudioFocusRequest.Builder(
@@ -126,8 +192,6 @@ jobs:
                       .setWillPauseWhenDucked(false)
                       .setAcceptsDelayedFocusGain(true)
                       .setOnAudioFocusChangeListener(focusChange -> {
-                          // Ignorujemy utratę focusu — trzymamy audio nawet gdy
-                          // inna aplikacja chce odtwarzać (np. przy powiadomieniu)
                           android.util.Log.d("SW", "AudioFocus change: " + focusChange);
                       })
                       .build();
@@ -140,7 +204,6 @@ jobs:
           j = j.replace('super.onCreate(savedInstanceState);',
                         'super.onCreate(savedInstanceState);' + setup)
 
-          # onDestroy — zwalniamy focus
           destroy = '''
               @Override
               public void onDestroy() {
@@ -156,7 +219,7 @@ jobs:
           j = j[:last] + destroy + '\n}'
 
           with open(main_activity, 'w') as f: f.write(j)
-          print(f'✓ AudioFocus dodany do: {main_activity}')
+          print(f'✓ MainActivity zaktualizowany: {main_activity}')
 
           # ── 3. network_security_config.xml ──────────────────────────────
           os.makedirs('android/app/src/main/res/xml', exist_ok=True)
