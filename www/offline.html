@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SoundWave — brak połączenia</title>
+<!--
+  Strona pokazywana przez Capacitora (server.errorPath), gdy nie da się
+  załadować https://muzyka.komodaoskara.pl — brak sieci albo serwer leży.
+  Leży lokalnie w APK, więc działa bez internetu.
+-->
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0f;color:#e8e8f0;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .box{min-height:100%;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:14px;padding:32px;text-align:center;box-sizing:border-box;}
+  .logo{width:72px;height:72px;border-radius:20px;
+    background:linear-gradient(135deg,#6ee7b7,#a78bfa);}
+  h1{font-size:20px;margin:6px 0 0;}
+  p{font-size:14px;color:#9a9ab0;margin:0;max-width:320px;line-height:1.5;}
+  button{margin-top:10px;padding:12px 26px;border:none;border-radius:12px;
+    background:#6ee7b7;color:#0a0a0f;font-size:15px;font-weight:700;cursor:pointer;}
+  .hint{font-size:12px;color:#6a6a80;}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo"></div>
+    <h1>Brak połączenia z serwerem</h1>
+    <p>Nie udało się połączyć z SoundWave. Sprawdź internet albo spróbuj za chwilę — serwer mógł być właśnie aktualizowany.</p>
+    <button onclick="location.href='https://muzyka.komodaoskara.pl'">Spróbuj ponownie</button>
+    <div class="hint" id="auto">Ponowna próba za <span id="s">15</span> s</div>
+  </div>
+<script>
+  // Automatyczna ponowna próba — po restarcie serwera aplikacja wraca sama.
+  var s = 15;
+  setInterval(function () {
+    s--;
+    if (s <= 0) { location.href = 'https://muzyka.komodaoskara.pl'; return; }
+    document.getElementById('s').textContent = s;
+  }, 1000);
+</script>
+</body>
+</html>
