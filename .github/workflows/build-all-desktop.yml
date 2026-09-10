@@ -1,0 +1,126 @@
+name: Zbuduj aplikację desktopową (Windows + Linux)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Buduje instalator Windows (NSIS) i paczkę RPM, a następnie publikuje je jako
+# wydanie na GitHubie — ze stałym linkiem do pobrania, bez logowania.
+#
+# ZMIANY względem poprzedniej wersji:
+#   • Było `on: [push]`, czyli build przy KAŻDYM commicie — także przy zmianie
+#     www/index.html, która aplikacji desktopowej w ogóle nie dotyczy (desktop
+#     ładuje stronę z serwera). Teraz tylko przy zmianach w desktop/, ikonie
+#     albo samym workflow, plus ręcznie.
+#   • main.js i package.json są PLIKAMI w katalogu desktop/, a nie tekstem
+#     sklejanym przez echo — dzięki temu doszedł Discord Rich Presence.
+#   • Dwa niemal identyczne joby zastąpione jedną macierzą.
+#   • Instalator Windows: z kreatorem po polsku, wyborem katalogu, skrótami
+#     i uruchomieniem po instalacji zamiast jednoklikowego "cichego" NSIS.
+# ══════════════════════════════════════════════════════════════════════════════
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'icon.png'
+      - '.github/workflows/build-all-desktop.yml'
+
+# Kolejny commit w trakcie budowania anuluje poprzedni run — nie ma sensu
+# kończyć buildu, który i tak zaraz zostanie zastąpiony.
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write     # potrzebne do utworzenia wydania
+
+env:
+  APP_VERSION: 1.1.${{ github.run_number }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            target: --win
+            files: desktop/dist/*.exe
+          - name: Linux
+            os: ubuntu-latest
+            target: --linux
+            files: desktop/dist/*.rpm
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: rpmbuild (tylko Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+
+      - name: Przygotuj projekt
+        shell: bash
+        env:
+          DISCORD_APP_ID: ${{ vars.DISCORD_APP_ID }}
+        run: |
+          cp icon.png desktop/soundwave.png
+          cd desktop
+          npm pkg set version="$APP_VERSION"
+          # Identyfikator aplikacji Discorda: Settings → Secrets and variables →
+          # Actions → zakładka Variables → DISCORD_APP_ID. Bez niego placeholder
+          # zostaje, a Rich Presence po prostu się nie włącza.
+          if [ -n "$DISCORD_APP_ID" ]; then
+            sed -i.bak "s/__DISCORD_APP_ID__/$DISCORD_APP_ID/" main.js && rm -f main.js.bak
+            echo "Discord Rich Presence: włączony"
+          else
+            echo "::notice::Brak zmiennej DISCORD_APP_ID — build bez Discord Rich Presence"
+          fi
+
+      - name: Zbuduj
+        shell: bash
+        working-directory: desktop
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-builder ${{ matrix.target }} --publish never
+
+      - name: Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoundWave-${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    name: Wydanie na GitHubie
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz artefakty
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Opublikuj
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: desktop-v${{ env.APP_VERSION }}
+          name: SoundWave Desktop ${{ env.APP_VERSION }}
+          body: |
+            **Windows:** pobierz `SoundWave-Setup-${{ env.APP_VERSION }}.exe` i uruchom.
+            Przy pierwszym uruchomieniu Windows SmartScreen może ostrzec o nieznanym
+            wydawcy — to dlatego, że instalator nie jest podpisany certyfikatem.
+            Kliknij „Więcej informacji" → „Uruchom mimo to".
+
+            **Fedora / RHEL:** `sudo dnf install ./soundwave-*.rpm`
+          files: out/*
+          make_latest: true
