@@ -297,6 +297,21 @@ jobs:
                       .setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
               } catch (Exception e) { e.printStackTrace(); }
 
+              // ── Blokada pionu na telefonie (v119) ───────────────────────
+              // Strona sama nie umie zablokować obrotu (pokazywała planszę
+              // "Obróć telefon"), więc robi to aktywność. Tylko telefony —
+              // telewizor (Google TV) i tablet zostają bez blokady.
+              try {
+                  android.app.UiModeManager um =
+                      (android.app.UiModeManager) getSystemService(UI_MODE_SERVICE);
+                  boolean tv = um != null && um.getCurrentModeType()
+                      == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
+                  if (!tv && getResources().getConfiguration().smallestScreenWidthDp < 600) {
+                      setRequestedOrientation(
+                          android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                  }
+              } catch (Exception e) { e.printStackTrace(); }
+
               // ── POST_NOTIFICATIONS (Android 13+) ────────────────────────
               try {
                   if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -446,6 +461,16 @@ jobs:
                   "                }\n"
                   "            }, 5000);\n"
                   "        } catch (Exception e) { e.printStackTrace(); }\n"
+                  "    }\n"
+                  "\n"
+                  "    @Override\n"
+                  "    public void onPause() {\n"
+                  "        // Stan odtwarzacza z telefonu, zanim aplikacja zejdzie w tlo.\n"
+                  "        // Android Auto wznawia z niego, jesli sam nie gral nic nowszego.\n"
+                  "        try {\n"
+                  "            SoundwaveAuth.syncFromWebView(this, getBridge().getWebView());\n"
+                  "        } catch (Exception e) { e.printStackTrace(); }\n"
+                  "        super.onPause();\n"
                   "    }\n"
               )
               last = j.rfind("}")

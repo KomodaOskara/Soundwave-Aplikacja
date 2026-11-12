@@ -11,7 +11,8 @@ import org.json.JSONTokener;
 
 /**
  * Przechowuje adres API i token sesji, żeby natywny odtwarzacz (Android Auto)
- * mógł korzystać z tego samego konta co aplikacja w telefonie.
+ * mógł korzystać z tego samego konta co aplikacja w telefonie — oraz ostatnią
+ * sesję odtwarzacza z telefonu, żeby auto mogło ją wznowić.
  *
  * Token NIE jest przekazywany przez JavascriptInterface — MainActivity odczytuje
  * go z localStorage przez evaluateJavascript i zapisuje tutaj. Ta droga jest
@@ -44,6 +45,15 @@ public final class SoundwaveAuth {
         return !token(ctx).isEmpty();
     }
 
+    /**
+     * Ostatnia sesja odtwarzacza z aplikacji w telefonie (localStorage sw_session,
+     * JSON). Android Auto wznawia z niej, gdy sam nie grał nic nowszego.
+     */
+    public static String webSession(Context ctx) {
+        String v = prefs(ctx).getString("web_session", "");
+        return v == null ? "" : v;
+    }
+
     public static void save(Context ctx, String api, String token) {
         if (token == null) token = "";
         SharedPreferences.Editor e = prefs(ctx).edit();
@@ -64,7 +74,8 @@ public final class SoundwaveAuth {
         final String js =
             "(function(){try{return JSON.stringify({"
           + "api:(typeof API!=='undefined'?API:''),"
-          + "token:(localStorage.getItem('sw_token')||'')"
+          + "token:(localStorage.getItem('sw_token')||''),"
+          + "session:(localStorage.getItem('sw_session')||'')"
           + "});}catch(e){return '{}';}})()";
         try {
             webView.evaluateJavascript(js, new ValueCallback<String>() {
@@ -93,6 +104,10 @@ public final class SoundwaveAuth {
             String token = o.optString("token", "");
             if (token.isEmpty()) return;                    // niezalogowany — nie kasujemy starego
             save(ctx, o.optString("api", ""), token);
+            String session = o.optString("session", "");
+            if (!session.isEmpty()) {
+                prefs(ctx).edit().putString("web_session", session).apply();
+            }
             Log.d(TAG, "Dane logowania przekazane do odtwarzacza natywnego");
         } catch (Exception e) {
             Log.w(TAG, "Nie udało się odczytać danych logowania: " + e);
