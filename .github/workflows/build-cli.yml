@@ -1,0 +1,122 @@
+name: Zbuduj SoundWave CLI (Linux + Windows)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cli/**'
+      - '.github/workflows/build-cli.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cli/**'
+      - '.github/workflows/build-cli.yml'
+
+concurrency:
+  group: cli-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CLI_VERSION: 0.2.${{ github.run_number }}
+
+jobs:
+  build:
+    name: Build CLI (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            bin_src: cli/target/release/soundwave-cli
+            asset_name: soundwave-cli-linux-x86_64
+          - name: Windows
+            os: windows-latest
+            bin_src: cli/target/release/soundwave-cli.exe
+            asset_name: soundwave-cli-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Pobierz kod
+        uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            cli/target/
+          key: ${{ runner.os }}-cli-${{ hashFiles('cli/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cli-
+
+      - name: Zbuduj release
+        shell: bash
+        working-directory: cli
+        run: cargo build --release --locked
+
+      - name: Przygotuj artefakt
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "${{ matrix.bin_src }}" "dist/${{ matrix.asset_name }}"
+
+      - name: Zapisz artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundwave-cli-${{ matrix.name }}
+          path: dist/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+  release:
+    name: Wydanie CLI na GitHubie
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz kod (skrypty instalacyjne)
+        uses: actions/checkout@v4
+
+      - name: Pobierz binarki
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Dołącz instalatory
+        run: |
+          cp cli/install.sh out/install.sh
+          cp cli/install.ps1 out/install.ps1
+          chmod +x out/soundwave-cli-linux-x86_64 out/install.sh
+
+      - name: Opublikuj wydanie
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: cli-v${{ env.CLI_VERSION }}
+          name: SoundWave CLI ${{ env.CLI_VERSION }}
+          make_latest: false
+          body: |
+            ### Szybka instalacja jedną komendą
+
+            **Linux (x86_64):**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/KomodaOskara/Soundwave-Aplikacja/main/cli/install.sh | bash
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/KomodaOskara/Soundwave-Aplikacja/main/cli/install.ps1 | iex
+            ```
+
+            Po instalacji wpisz w terminalu `swcli` (lub `soundwave-cli`).
+            Wymagane `ffmpeg` w PATH (Windows: `winget install Gyan.FFmpeg`).
+          files: out/*
